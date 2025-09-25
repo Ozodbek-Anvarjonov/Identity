@@ -1,4 +1,5 @@
 using Identity.Domain.Common.Entities;
+using Identity.Domain.Enums;
 using System.Linq.Expressions;
 
 namespace Identity.Persistence.Repositories;
@@ -9,12 +10,14 @@ public interface IRepository<TEntity>
     IQueryable<TEntity> Get(
         Expression<Func<TEntity, bool>>? predicate = default,
         bool asNoTracking = true,
+        DeletedState deletedState = DeletedState.Active,
         string[]? includes = default
         );
 
     Task<TEntity?> GetByIdAsync(
         long id,
         bool asNoTracking = true,
+        DeletedState deletedState = DeletedState.Active,
         string[]? includes = default,
         CancellationToken cancellationToken = default
         );

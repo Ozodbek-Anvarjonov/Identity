@@ -1,4 +1,5 @@
 using Identity.Domain.Common.Entities;
+using Identity.Domain.Enums;
 using Identity.Persistence.Extensions;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
@@ -11,6 +12,7 @@ public class Repository<TEntity>(DbContext context) : IRepository<TEntity>
     public IQueryable<TEntity> Get(
         Expression<Func<TEntity, bool>>? predicate = default,
         bool asNoTracking = true,
+        DeletedState deletedState = DeletedState.Active,
         string[]? includes = default
         )
     {
@@ -22,6 +24,7 @@ public class Repository<TEntity>(DbContext context) : IRepository<TEntity>
         if (predicate is not null)
             query = query.Where(predicate);
 
+        query = ApplySoftDeletedFilter(query, deletedState);
         query = query.ApplyInclude(includes);
 
         return query;
@@ -30,6 +33,7 @@ public class Repository<TEntity>(DbContext context) : IRepository<TEntity>
     public async Task<TEntity?> GetByIdAsync(
         long id,
         bool asNoTracking = true,
+        DeletedState deletedState = DeletedState.Active,    
         string[]? includes = default,
         CancellationToken cancellationToken = default
         )
@@ -39,6 +43,7 @@ public class Repository<TEntity>(DbContext context) : IRepository<TEntity>
         if (asNoTracking)
             query = query.AsNoTracking();
 
+        query = ApplySoftDeletedFilter(query, deletedState);
         query = query.ApplyInclude(includes);
 
         var entity = await query.FirstOrDefaultAsync(entity => entity.Id == id, cancellationToken);
@@ -80,4 +85,27 @@ public class Repository<TEntity>(DbContext context) : IRepository<TEntity>
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
         await context.SaveChangesAsync(cancellationToken);
+
+    #region Soft deleted method
+    private static readonly bool _isSoftDeletedEntity = typeof(ISoftDeletedEntity).IsAssignableFrom(typeof(TEntity));
+
+    private static IQueryable<TEntity> ApplySoftDeletedFilter(
+        IQueryable<TEntity> query,
+        DeletedState deletedState
+        )
+    {
+        if (!_isSoftDeletedEntity)
+            return query;
+
+        query = deletedState switch
+        {
+            DeletedState.Active => query.Where(entity => !((ISoftDeletedEntity)entity).IsDeleted),
+            DeletedState.OnlyDeleted => query.Where(entity => ((ISoftDeletedEntity)entity).IsDeleted),
+            DeletedState.WithDeleted => query,
+            _ => throw new ArgumentOutOfRangeException(nameof(deletedState), deletedState, null)
+        };
+
+        return query;
+    }
+    #endregion
 }
